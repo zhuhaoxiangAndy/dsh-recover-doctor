@@ -1,0 +1,47 @@
+{
+  "name": "dsh-session-recovery",
+  "description": "Detect sessions interrupted by an abnormal host exit (unclosed tail turn) and recover them: /recover list | doctor | resume | fork | dismiss. doctor audits post-migration consistency (registry vs session cwd vs ownership vs title/group collisions) read-only. Aligned to dsh 0.2.1-rc.5; zero npm dependencies.",
+  "version": "0.2.0",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "tests",
+    "cordis.patch.yml",
+    "dsh.plugin.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18",
+    "dsh": ">=0.2.1-0"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh-settings": ">=0.1.0-rc.7",
+    "@deepseek-ai/schemastery": ">=3.18.1"
+  },
+  "scripts": {
+    "test": "node --test tests/smoke.mjs && node tests/projectkey.mjs"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "session-recovery",
+    "crash-recovery",
+    "interrupted-session",
+    "resume",
+    "cordis-plugin"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build / pack artifacts
+*.tgz
+dist/
+
+# Local scratch
+*.log
+.tmp/
+tmp/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Backups created during local maintenance
+*.bak
+*.bak-*
+*.corrupted-*

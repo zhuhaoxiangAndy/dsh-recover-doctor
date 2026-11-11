@@ -1,0 +1,13 @@
+{
+  "id": "dsh-external/dsh-session-recovery",
+  "version": "0.1.0",
+  "main": "./src/index.js",
+  "description": "Detect sessions interrupted by an abnormal host exit (unclosed tail turn) and recover them via /recover list | resume | fork | dismiss. Aligned to dsh 0.2.1-rc.5.",
+  "engines": {
+    "dsh": ">=0.2.1-0"
+  },
+  "contributes": {
+    "tools": [],
+    "skills": []
+  }
+}

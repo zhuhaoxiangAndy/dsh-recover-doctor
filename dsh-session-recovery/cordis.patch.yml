@@ -1,0 +1,18 @@
+# dsh-session-recovery bundle patch.
+#
+# Installed through the official CLI —
+#
+#   dsh plugin --profile <name> add dsh-session-recovery
+#
+# — the command reconciles dsh.profile.bundles against installed packages and,
+# seeing this declaration, merges THIS patch exactly like the manual mount
+# line below. No profile file edits needed.
+#
+# Manual mount equivalent (profile cordis.patch.yml):
+#
+#   - insert:
+#       - id: session-recovery
+#         name: 'dsh-session-recovery'
+- insert:
+    - id: session-recovery
+      name: 'dsh-session-recovery'
