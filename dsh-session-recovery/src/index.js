@@ -30,6 +30,7 @@ import { applyConfig, renderTemplate, SETTINGS_NS, DEFAULTS } from './config.mjs
 import { parseRecoverInput, formatList, pickRow } from './commands.mjs'
 import { isExcludedWorkspace } from './glob.mjs'
 import { auditOwnership, auditRegistryShape, findTitleConflicts, formatDoctor } from './doctor.mjs'
+import { auditSessionLog, decodeZstdText, parseEvents, scanZstdFrames } from './zstd-frames.mjs'
 
 export const name = 'dsh-session-recovery'
 
@@ -162,6 +163,90 @@ async function scanCached(ctx, force = false) {
   const result = await scanInterrupted(ctx)
   scanCache = { rows: result.rows, stats: result.stats, at: Date.now() }
   return result
+}
+
+/**
+ * 多帧 zstd 完整性体检（v0.3.0，只读）。
+ *
+ * 这个子命令存在的理由：`zstdDecompressSync(整个文件)` 只解出第 1 帧且**不报错**，
+ * 所以「表面上能打开」的会话可能已经丢了 99% 的事件。实测一个真实会话：
+ * 5101 帧 / 9427 事件，整份解压只得到 1 个事件（228 字符），多帧解压得到 1921 万字符。
+ * 因此必须提供一个能看见「帧数与事件数」的检查入口。
+ *
+ * @param {any} ctx
+ * @param {string} target 会话 id 前缀，或日志文件绝对路径
+ */
+async function doAudit(ctx, target) {
+  const { existsSync, readdirSync, statSync } = await import('node:fs')
+  const path = (await import('node:path')).default
+  const os = (await import('node:os')).default
+
+  // (a) 直接给文件路径
+  let file = null
+  if (/\.zstd$/i.test(target) && existsSync(target)) {
+    file = target
+  } else {
+    // (b) 按会话 id 前缀在 sessions 根下找
+    const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
+    const root = path.join(home, 'sessions')
+    let best = null
+    let matches = 0
+    try {
+      for (const slug of readdirSync(root)) {
+        const sd = path.join(root, slug)
+        if (!statSync(sd).isDirectory()) continue
+        for (const sid of readdirSync(sd)) {
+          if (!sid.startsWith(target)) continue
+          const f = path.join(sd, sid, 'session.v4.jsonl.zstd')
+          if (!existsSync(f)) continue
+          matches += 1
+          const size = statSync(f).size
+          if (best === null || size > best.size) best = { file: f, sid, size }
+        }
+      }
+    } catch (error) {
+      return { kind: 'error', text: `无法扫描会话目录：${errMsg(error)}` }
+    }
+    if (matches === 0) return { kind: 'error', text: `没有找到匹配 "${target}" 的会话日志` }
+    if (matches > 1) {
+      return { kind: 'error', text: `"${target}" 匹配到 ${matches} 个会话，请给出更长的前缀` }
+    }
+    file = best.file
+  }
+
+  try {
+    const audit = auditSessionLog(file)
+    const { readFileSync } = await import('node:fs')
+    const buf = readFileSync(file)
+    const multi = decodeZstdText(buf)
+    const events = parseEvents(multi.text).events
+
+    const lines = [
+      `会话日志体检：${path.basename(path.dirname(file))}`,
+      `  文件      : ${file}`,
+      `  大小      : ${buf.length.toLocaleString()} 字节`,
+      `  帧数      : ${audit.frames.toLocaleString()}（成功解压 ${audit.decoded}，失败 ${audit.failed}）`,
+      `  事件数    : ${events.length.toLocaleString()}`,
+      `  坏行      : ${audit.badLines}`,
+      `  第 0 帧   : ${audit.headerOk ? '恰好一行 header ✓' : '不是单行 header ✗（boot 会白屏）'}`,
+    ]
+    if (audit.frames > 1) {
+      lines.push('')
+      lines.push(`  提示：这是多帧文件。用 zstdDecompressSync(整份文件) 只会得到第 0 帧的 1 个事件，`)
+      lines.push(`        必须按帧魔数 28 B5 2F FD 切分后逐帧解压，才能拿到全部 ${events.length.toLocaleString()} 个事件。`)
+    }
+    if (audit.problems.length > 0) {
+      lines.push('')
+      lines.push('  问题：')
+      for (const p of audit.problems) lines.push('    - ' + p)
+    } else {
+      lines.push('')
+      lines.push('  结论：完整，未发现丢帧或坏行。')
+    }
+    return { kind: audit.ok ? 'success' : 'error', text: lines.join(String.fromCharCode(10)) }
+  } catch (error) {
+    return { kind: 'error', text: `体检失败：${errMsg(error)}` }
+  }
 }
 
 /**
@@ -336,8 +421,8 @@ function registerCommand(ctx) {
     commandCtx.commands.register({
       definitionId: `${name}:recover`,
       name: COMMAND,
-      description: 'List sessions interrupted by an abnormal exit and recover them, or audit migration consistency (list | doctor | resume <id> | fork <id> [seq] | dismiss <id>)',
-      input: { hint: 'list | doctor | resume <id> | fork <id> [seq] | dismiss <id>' },
+      description: 'List sessions interrupted by an abnormal exit and recover them, or audit migration / log integrity (list | doctor | audit <id|file> | resume <id> | fork <id> [seq] | dismiss <id>)',
+      input: { hint: 'list | doctor | audit <id|file> | resume <id> | fork <id> [seq] | dismiss <id>' },
       handler: async ({ rawInput }) => {
         try {
           const parsed = parseRecoverInput(rawInput)
@@ -352,6 +437,11 @@ function registerCommand(ctx) {
             const text = formatDoctor(report)
             const bad = (report.registry?.problems?.length ?? 0) + (report.ownership?.problems?.length ?? 0)
             return { kind: bad > 0 ? 'error' : 'success', text }
+          }
+
+          // v0.3.0: multi-frame integrity audit (read-only).
+          if (parsed.action === 'audit') {
+            return await doAudit(ctx, parsed.id)
           }
 
           if (parsed.action === 'list' || parsed.action === 'help') {

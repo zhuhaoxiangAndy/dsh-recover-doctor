@@ -3,7 +3,7 @@
 /**
  * 解析 /recover 的 rawInput。
  * @param {string|undefined} rawInput - 例如 "list"、"resume <id>"、"fork <id> [seq]"、"dismiss <id>"。
- * @returns {{action: 'list'|'resume'|'fork'|'dismiss'|'help', id?: string, seq?: number, error?: string}}
+ * @returns {{action: 'list'|'doctor'|'audit'|'resume'|'fork'|'dismiss'|'help', id?: string, seq?: number, error?: string}}
  */
 export function parseRecoverInput(rawInput) {
   const parts = String(rawInput || '').trim().split(/\s+/).filter((s) => s.length > 0)
@@ -17,6 +17,13 @@ export function parseRecoverInput(rawInput) {
   if (action === 'doctor') {
     if (parts.length > 1) return { action, error: 'doctor 不接受参数' }
     return { action }
+  }
+  // v0.3.0: 多帧 zstd 完整性体检。传会话 id 前缀，或一个 .zstd 文件绝对路径。
+  if (action === 'audit') {
+    const id = (parts[1] || '').trim()
+    if (!id) return { action, error: '用法：/recover audit <session-id 前缀 | 日志文件路径>' }
+    if (parts.length > 2) return { action, error: 'audit 只接受一个参数' }
+    return { action, id }
   }
   if (action === 'resume' || action === 'fork' || action === 'dismiss') {
     const id = parts[1]

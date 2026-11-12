@@ -1,7 +1,7 @@
 {
   "name": "dsh-session-recovery",
   "description": "Detect sessions interrupted by an abnormal host exit (unclosed tail turn) and recover them: /recover list | doctor | resume | fork | dismiss. doctor audits post-migration consistency (registry vs session cwd vs ownership vs title/group collisions) read-only. Aligned to dsh 0.2.1-rc.5; zero npm dependencies.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "./src/index.js",
   "exports": {
@@ -31,7 +31,7 @@
     "@deepseek-ai/schemastery": ">=3.18.1"
   },
   "scripts": {
-    "test": "node --test tests/smoke.mjs && node tests/projectkey.mjs"
+    "test": "node --test tests/smoke.mjs tests/zstd-frames.mjs && node tests/projectkey.mjs"
   },
   "keywords": [
     "deepseek-harness",
